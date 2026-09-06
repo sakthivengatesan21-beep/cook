@@ -193,6 +193,13 @@ export interface Clip {
   transcript: string;
   topic: string;
   hook: string;
+  selected_hook?: string;
+  selected_title?: string;
+  hook_type?: string;
+  intent_label?: string;
+  keywords?: string[];
+  key_takeaways?: string[];
+  aspect_ratio?: string;
   reason: string;
   category?: string;
   score: number;
@@ -212,6 +219,7 @@ export interface Clip {
   }>;
   metadata?: ClipMetadata;
   created_at: string;
+  [key: string]: any;
 }
 
 export interface BurnCaptionsRequest {

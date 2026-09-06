@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>COOK Extension</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="brand">
+        <div class="logo">⚡</div>
+        <div>
+          <h2>COOK</h2>
+          <span class="badge">EXTENSION</span>
+        </div>
+      </div>
+      <a href="http://localhost:3001/ideas" target="_blank" class="open-app-link">OPEN COOK ↗</a>
+    </div>
+
+    <!-- Active Page Info -->
+    <div class="card">
+      <div class="platform-badge" id="platform-badge">PAGE DETECTED</div>
+      <div class="page-title" id="page-title">Loading current page...</div>
+    </div>
+
+    <!-- Actions -->
+    <div class="form-group">
+      <label for="idea-notes">NOTES / INSPIRATION ANGLE</label>
+      <textarea id="idea-notes" rows="3" placeholder="Add custom creator takeaway or context..."></textarea>
+    </div>
+
+    <div class="btn-group">
+      <button id="btn-save-idea" class="btn btn-primary">⚡ SAVE TO IDEA BANK</button>
+      <button id="btn-generate-angles" class="btn btn-secondary">💡 GENERATE 3 HOOKS</button>
+    </div>
+
+    <!-- Generated Angles Output -->
+    <div id="angles-container" class="angles-card" style="display: none;">
+      <div class="angles-header">AI GENERATED HOOK ANGLES:</div>
+      <div id="angles-list" class="angles-list"></div>
+    </div>
+
+    <div id="status-msg" class="status-msg" style="display: none;"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

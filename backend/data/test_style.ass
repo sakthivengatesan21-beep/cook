@@ -1,0 +1,13 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: AcidDefault,Impact,64,&H00FFFFFF,&H00D2E823,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,4,2,2,40,40,240,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:03.00,AcidDefault,,0,0,0,,{\\c&H23E8D2&}BUILDING{\\c&HFFFFFF&} AUTONOMOUS AI AGENTS
+Dialogue: 0,0:00:03.00,0:00:06.00,AcidDefault,,0,0,0,,REQUIRES {\\c&H23E8D2&}SPECIALIZED{\\c&HFFFFFF&} TOOLS

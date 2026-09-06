@@ -1,0 +1,51 @@
+# Node & Next.js
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+out/
+build/
+dist/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Environment variables & secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Generated Media / Artifacts / Local Storage Mirror
+backend/uploads/
+backend/outputs/
+backend/data/storage/
+backend/data/cook_db.json
+backend/data/supabase_local_mirror.json
+scratch_test_files/
+
+# Large binaries & media
+*.mp4
+*.mov
+*.webm
+*.wav
+*.mp3
+*.zip
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

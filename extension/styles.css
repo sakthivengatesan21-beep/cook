@@ -1,0 +1,225 @@
+/* COOK Neo-Brutalist Chrome Extension Styling */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 360px;
+  background-color: #F8F4E8;
+  color: #09090B;
+  font-family: monospace, system-ui, -apple-system, sans-serif;
+  padding: 16px;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid #09090B;
+  padding-bottom: 8px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo {
+  width: 28px;
+  height: 28px;
+  background-color: #D2E823;
+  border: 2px solid #09090B;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+h2 {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+
+.badge {
+  font-size: 9px;
+  background-color: #09090B;
+  color: #D2E823;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.open-app-link {
+  font-size: 11px;
+  color: #09090B;
+  font-weight: bold;
+  text-decoration: none;
+  border: 1px solid #09090B;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background-color: #FFFFFF;
+}
+
+.open-app-link:hover {
+  background-color: #D2E823;
+}
+
+.card {
+  background-color: #FFFFFF;
+  border: 2px solid #09090B;
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 3px 3px 0px #09090B;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.platform-badge {
+  font-size: 9px;
+  font-weight: bold;
+  background-color: #D2E823;
+  width: fit-content;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #09090B;
+}
+
+.page-title {
+  font-size: 11px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+label {
+  font-size: 10px;
+  font-weight: bold;
+  color: #09090B;
+}
+
+textarea {
+  width: 100%;
+  background-color: #FFFFFF;
+  border: 2px solid #09090B;
+  border-radius: 8px;
+  padding: 8px;
+  font-family: inherit;
+  font-size: 11px;
+  resize: none;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #09090B;
+  box-shadow: 2px 2px 0px #D2E823;
+}
+
+.btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.btn {
+  width: 100%;
+  padding: 9px;
+  border: 2px solid #09090B;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 3px 3px 0px #09090B;
+  transition: all 0.1s ease;
+}
+
+.btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #09090B;
+}
+
+.btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #09090B;
+}
+
+.btn-primary {
+  background-color: #D2E823;
+  color: #09090B;
+}
+
+.btn-secondary {
+  background-color: #FFFFFF;
+  color: #09090B;
+}
+
+.angles-card {
+  background-color: #FFFFFF;
+  border: 2px solid #09090B;
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 3px 3px 0px #09090B;
+}
+
+.angles-header {
+  font-size: 10px;
+  font-weight: bold;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 4px;
+}
+
+.angles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.angle-item {
+  font-size: 10px;
+  background-color: #F8F4E8;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #09090B;
+}
+
+.status-msg {
+  font-size: 11px;
+  font-weight: bold;
+  text-align: center;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #09090B;
+}
+
+.status-msg.success {
+  background-color: #D2E823;
+}
+
+.status-msg.loading {
+  background-color: #FFFFFF;
+}
+
+.status-msg.error {
+  background-color: #ffcccc;
+}

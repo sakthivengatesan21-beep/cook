@@ -9,5 +9,10 @@
     "build": "npm run build --workspace=frontend",
     "dev": "npm run dev --workspace=frontend",
     "start": "npm run start --workspace=frontend"
+  },
+  "dependencies": {
+    "next": "^15.1.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }

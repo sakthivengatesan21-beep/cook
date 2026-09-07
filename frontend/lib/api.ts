@@ -11,11 +11,36 @@ import {
 } from "@/types";
 import { getAccessToken } from "./supabase";
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (typeof window !== "undefined" && window.location.hostname
-    ? `http://${window.location.hostname}:8000`
-    : "http://127.0.0.1:8000");
+export function getApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, "");
+  }
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    // Local development
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return `http://${hostname}:8000`;
+    }
+    // On Vercel or cloud production without explicit NEXT_PUBLIC_API_URL,
+    // use relative path so requests route through Next.js proxy rewrites without HTTP 8000 mixed-content errors.
+    return "";
+  }
+  return process.env.BACKEND_URL ? process.env.BACKEND_URL.replace(/\/+$/, "") : "http://127.0.0.1:8000";
+}
+
+export const API_BASE = getApiBaseUrl();
+
+export async function checkBackendHealth(): Promise<{ online: boolean; message?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/`, { method: "GET", cache: "no-store" });
+    if (res.ok) {
+      return { online: true };
+    }
+    return { online: false, message: `Server returned HTTP ${res.status}` };
+  } catch (err: any) {
+    return { online: false, message: err.message || "Failed to connect to COOK backend server." };
+  }
+}
 
 export interface UploadProgressCallback {
   (loadedBytes: number, totalBytes: number, percent: number): void;

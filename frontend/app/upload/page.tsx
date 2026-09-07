@@ -304,9 +304,19 @@ export default function UploadPage() {
 
         {/* Error Message */}
         {errorMessage && (
-          <div className="mt-4 p-4 bg-red-100 border-2 border-red-500 rounded-xl text-red-900 text-xs font-mono font-bold flex items-center gap-2 w-full text-left">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-            <span>{errorMessage}</span>
+          <div className="mt-4 p-4 bg-red-100 border-2 border-red-500 rounded-xl text-red-900 text-xs font-mono font-bold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full text-left shadow-hard-xs">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+            {selectedFile && !isUploading && (
+              <button
+                onClick={handleStartCooking}
+                className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 transition-colors uppercase font-mono font-bold shrink-0 self-end sm:self-auto"
+              >
+                RETRY UPLOAD
+              </button>
+            )}
           </div>
         )}
 

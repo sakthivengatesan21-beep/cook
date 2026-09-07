@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from app.config import UPLOADS_DIR, OUTPUTS_DIR, DATA_DIR, PORT, HOST
 from app.api.routes import router
+from app.api.captions_api import captions_router
 from app.services.video_engine import generate_sample_demo_video
 
 app = FastAPI(
@@ -25,6 +26,7 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")
 
 app.include_router(router)
+app.include_router(captions_router)
 
 @app.on_event("startup")
 async def startup_event():

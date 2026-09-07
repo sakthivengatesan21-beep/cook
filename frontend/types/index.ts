@@ -349,3 +349,71 @@ export interface ModerationReport {
   summary: string;
 }
 
+// -----------------------------------------------------------------------------
+// MULTIMODAL VIDEO CAPTION PIPELINE TYPES
+// -----------------------------------------------------------------------------
+
+export interface VisualAction {
+  action: string;
+  timestamp?: number;
+  confidence: number;
+}
+
+export interface ConfidenceBreakdown {
+  main_activity: number;
+  objects: number;
+  environment: number;
+  spoken_context: number;
+  overall: number;
+}
+
+export interface StructuredVisualContext {
+  main_activity: string;
+  objects: string[];
+  environment: string;
+  people_count: number;
+  actions: VisualAction[];
+  specific_details: Array<Record<string, any>>;
+  scene_progression: Array<Record<string, any>>;
+  visual_summary: string;
+  confidence_breakdown: ConfidenceBreakdown;
+  frames_analyzed: number;
+  sampled_timestamps: number[];
+}
+
+export interface CaptionCandidate {
+  id?: string;
+  text: string;
+  style: "natural" | "funny" | "storytelling" | "short" | "professional" | string;
+  style_label: string;
+  accuracy_score: number;
+  visual_relevance: number;
+  transcript_relevance: number;
+  naturalness: number;
+  engagement: number;
+  confidence: number;
+  final_score: number;
+  unsupported_terms: string[];
+  is_supported: boolean;
+}
+
+export interface CaptionValidationResult {
+  is_valid: boolean;
+  accuracy_score: number;
+  unsupported_terms: string[];
+  grounded_facts: string[];
+  validation_status: "PASSED" | "FLAGGED" | "REJECTED" | string;
+}
+
+export interface MultimodalCaptionResponse {
+  video_id: string;
+  duration: number;
+  visual_context: StructuredVisualContext;
+  transcript: string;
+  captions: CaptionCandidate[];
+  recommended_caption: string;
+  recommended_style: string;
+  debug_signals: Record<string, any>;
+}
+
+

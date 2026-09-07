@@ -7,7 +7,9 @@ import {
   ContentGenomeMoment,
   RemixTreeNode,
   AskVideoResponse,
-  AudioIntelligenceReport
+  AudioIntelligenceReport,
+  StructuredVisualContext,
+  MultimodalCaptionResponse
 } from "@/types";
 import { getAccessToken } from "./supabase";
 
@@ -566,4 +568,87 @@ export async function updateScheduleItem(
   const data = await res.json();
   return data.schedule_item;
 }
+
+// -------------------------------------------------------------
+// MULTIMODAL VIDEO CAPTION PIPELINE API METHODS
+// -------------------------------------------------------------
+
+export async function analyzeVideoVisuals(
+  videoId: string,
+  sampleFramesCount: number = 8
+): Promise<StructuredVisualContext> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/captions/analyze`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      video_id: videoId,
+      sample_frames_count: sampleFramesCount,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Visual analysis failed." }));
+    throw new Error(err.detail || "Failed to analyze video visuals.");
+  }
+  return await res.json();
+}
+
+export async function generateMultimodalCaptions(params: {
+  video_id: string;
+  visual_context?: StructuredVisualContext;
+  transcript?: string;
+  style_preference?: string;
+  tone_tweak?: string;
+  regenerate?: boolean;
+}): Promise<MultimodalCaptionResponse> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/captions/generate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Caption generation failed." }));
+    throw new Error(err.detail || "Failed to generate multimodal captions.");
+  }
+  return await res.json();
+}
+
+export async function regenerateMultimodalCaptions(params: {
+  video_id: string;
+  style_preference?: string;
+  tone_tweak?: string;
+}): Promise<MultimodalCaptionResponse> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/captions/regenerate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...params, regenerate: true }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Caption regeneration failed." }));
+    throw new Error(err.detail || "Failed to regenerate multimodal captions.");
+  }
+  return await res.json();
+}
+
+export async function getVideoCaptions(
+  videoId: string,
+  stylePreference?: string
+): Promise<MultimodalCaptionResponse> {
+  const headers = await getAuthHeaders();
+  const url = stylePreference
+    ? `${API_BASE}/api/captions/video/${videoId}?style_preference=${encodeURIComponent(stylePreference)}`
+    : `${API_BASE}/api/captions/video/${videoId}`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to fetch captions." }));
+    throw new Error(err.detail || "Failed to fetch video captions.");
+  }
+  return await res.json();
+}
+
 

@@ -323,3 +323,84 @@ class ScheduleUpdateRequest(BaseModel):
     status: Optional[str] = None  # IDEA, READY, SCHEDULED, POSTED
     platform: Optional[str] = None
 
+# -----------------------------------------------------------------------------
+# MULTIMODAL VIDEO CAPTION PIPELINE SCHEMAS
+# -----------------------------------------------------------------------------
+
+class VisualFrame(BaseModel):
+    timestamp: float
+    frame_path: str
+    frame_index: int
+    base64_data: Optional[str] = None
+
+class VisualAction(BaseModel):
+    action: str
+    timestamp: Optional[float] = None
+    confidence: float = 0.90
+
+class ConfidenceBreakdown(BaseModel):
+    main_activity: float = 0.90
+    objects: float = 0.85
+    environment: float = 0.90
+    spoken_context: float = 0.90
+    overall: float = 0.88
+
+class StructuredVisualContext(BaseModel):
+    main_activity: str
+    objects: List[str] = []
+    environment: str = "general"
+    people_count: int = 1
+    actions: List[VisualAction] = []
+    specific_details: List[Dict[str, Any]] = []
+    scene_progression: List[Dict[str, Any]] = []
+    visual_summary: str = ""
+    confidence_breakdown: ConfidenceBreakdown = Field(default_factory=ConfidenceBreakdown)
+    frames_analyzed: int = 0
+    sampled_timestamps: List[float] = []
+
+class CaptionCandidate(BaseModel):
+    id: Optional[str] = None
+    text: str
+    style: str  # natural, funny, storytelling, short, professional
+    style_label: str
+    accuracy_score: float = 0.95
+    visual_relevance: float = 0.90
+    transcript_relevance: float = 0.85
+    naturalness: float = 0.90
+    engagement: float = 0.88
+    confidence: float = 0.90
+    final_score: float = 0.92
+    unsupported_terms: List[str] = []
+    is_supported: bool = True
+
+class CaptionValidationResult(BaseModel):
+    is_valid: bool
+    accuracy_score: float
+    unsupported_terms: List[str] = []
+    grounded_facts: List[str] = []
+    validation_status: str = "PASSED"  # PASSED, FLAGGED, REJECTED
+
+class MultimodalCaptionResponse(BaseModel):
+    video_id: str
+    duration: float = 0.0
+    visual_context: StructuredVisualContext
+    transcript: str = ""
+    captions: List[CaptionCandidate] = []
+    recommended_caption: str = ""
+    recommended_style: str = "natural"
+    debug_signals: Dict[str, Any] = {}
+
+class AnalyzeVideoRequest(BaseModel):
+    video_id: Optional[str] = None
+    video_path: Optional[str] = None
+    sample_frames_count: Optional[int] = 8
+
+class GenerateCaptionsRequest(BaseModel):
+    video_id: str
+    visual_context: Optional[StructuredVisualContext] = None
+    transcript: Optional[str] = None
+    style_preference: Optional[str] = None
+    tone_tweak: Optional[str] = None
+    regenerate: bool = False
+
+

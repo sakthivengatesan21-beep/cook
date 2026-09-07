@@ -483,16 +483,16 @@ def _detect_local_grounded_clips(
     video_id: str
 ) -> List[Dict[str, Any]]:
     total_duration = max(video_duration, segments[-1]["end"])
-    chunks = chunk_transcript(segments, chunk_duration_sec=75.0, overlap_duration_sec=15.0)
+    chunks = chunk_transcript(segments, chunk_duration_sec=35.0, overlap_duration_sec=10.0)
     
     if total_duration < 30.0:
         target_count = 1
     elif total_duration < 90.0:
-        target_count = 3
+        target_count = 2
     elif total_duration < 300.0:
-        target_count = 5
+        target_count = 3
     else:
-        target_count = min(8, max(4, int(total_duration // 60)))
+        target_count = min(4, max(2, int(total_duration // 60)))
 
     candidate_moments = []
     

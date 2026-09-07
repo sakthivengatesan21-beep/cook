@@ -167,50 +167,60 @@ def create_clip(
     timeout: int = 180
 ) -> bool:
     """
-    Extracts a temporal clip from start_time to end_time with lightning-fast stream copy or ultrafast encoding.
-    Guarantees a valid output file exists under all conditions with multiple fallback tiers.
+    Extracts a temporal clip from start_time to end_time with frame-accurate encoding.
+    Ensures that timestamp 0.0s of the cut clip matches start_time precisely with 0ms offset.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     duration = max(0.5, end_time - start_time)
     info = get_video_info(video_path)
     
-    # Tier 1: Try instant stream copy (0.02s - 0.1s)
-    try:
-        args_copy = [
-            "-ss", str(max(0.0, start_time)),
-            "-i", str(video_path),
-            "-t", str(duration),
-            "-c", "copy",
-            str(output_path)
-        ]
-        res = run_ffmpeg(args_copy, timeout=30)
-        if res.returncode == 0 and output_path.exists() and os.path.getsize(output_path) > 1000:
-            return True
-    except Exception as e:
-        print(f"[CLIP EXTRACT] Stream copy bypassed ({e}), proceeding to ultrafast transcode...")
-
-    # Tier 2: Ultrafast libx264 encoding (2-5s)
+    # Tier 1: Frame-accurate input seek with ultrafast libx264/aac encode
+    # Using -ss before -i with -avoid_negative_ts make_zero gives exact frame cuts without keyframe drift
     try:
         args = [
-            "-ss", str(max(0.0, start_time)),
+            "-ss", f"{max(0.0, start_time):.3f}",
             "-i", str(video_path),
-            "-t", str(duration),
+            "-t", f"{duration:.3f}",
+            "-avoid_negative_ts", "make_zero",
             "-c:v", "libx264",
             "-preset", "ultrafast",
-            "-crf", "28",
+            "-crf", "22",
+            "-pix_fmt", "yuv420p",
             "-threads", "2"
         ]
         if info.get("has_audio", False):
-            args += ["-c:a", "aac", "-b:a", "128k"]
+            args += ["-c:a", "aac", "-b:a", "192k", "-ar", "44100"]
         else:
             args += ["-an"]
             
         args.append(str(output_path))
         res = run_ffmpeg(args, timeout=timeout)
-        if res.returncode == 0 and output_path.exists() and os.path.getsize(output_path) > 0:
+        if res.returncode == 0 and output_path.exists() and os.path.getsize(output_path) > 1000:
             return True
     except Exception as e:
-        print(f"[CLIP EXTRACT] Ultrafast transcode warning: {e}")
+        print(f"[CLIP EXTRACT] Frame-accurate transcode error: {e}")
+
+    # Tier 2: Output seeking fallback (slower but guaranteed frame accurate)
+    try:
+        args_slow = [
+            "-i", str(video_path),
+            "-ss", f"{max(0.0, start_time):.3f}",
+            "-t", f"{duration:.3f}",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-pix_fmt", "yuv420p",
+            "-threads", "2"
+        ]
+        if info.get("has_audio", False):
+            args_slow += ["-c:a", "aac", "-b:a", "128k"]
+        else:
+            args_slow += ["-an"]
+        args_slow.append(str(output_path))
+        res = run_ffmpeg(args_slow, timeout=timeout)
+        if res.returncode == 0 and output_path.exists() and os.path.getsize(output_path) > 0:
+            return True
+    except Exception as e2:
+        print(f"[CLIP EXTRACT] Output seek transcode warning: {e2}")
 
     # Tier 3: Direct safe file copy fallback
     try:

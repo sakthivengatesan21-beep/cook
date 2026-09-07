@@ -38,6 +38,12 @@ import {
   Layers,
   ShieldCheck,
   AlertTriangle,
+  Type,
+  Palette,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
+  RefreshCw,
 } from "lucide-react";
 
 interface ContentPackModalProps {
@@ -74,7 +80,7 @@ export default function ContentPackModal({
   onClipUpdated,
 }: ContentPackModalProps) {
   const [activeTab, setActiveTab] = useState<
-    "hooks" | "posts" | "seo" | "translate" | "audio" | "thumbnails" | "explain" | "moderation"
+    "hooks" | "posts" | "captions" | "seo" | "translate" | "audio" | "thumbnails" | "explain" | "moderation"
   >("hooks");
   const [activePlatform, setActivePlatform] = useState<"instagram" | "tiktok" | "shorts" | "linkedin" | "x">(
     "instagram"
@@ -87,9 +93,21 @@ export default function ContentPackModal({
   const [moderationReport, setModerationReport] = useState<any>(null);
   const [loadingModeration, setLoadingModeration] = useState(false);
 
+  // Caption Studio State
+  const [captionStyle, setCaptionStyle] = useState<string>(clip?.caption_style || "ACID");
+  const [captionPosition, setCaptionPosition] = useState<string>(clip?.caption_position || "BOTTOM");
+  const [enableActiveHighlight, setEnableActiveHighlight] = useState<boolean>(true);
+  const [captionPhrases, setCaptionPhrases] = useState<any[]>(clip?.caption_phrases || []);
+  const [burningCaptions, setBurningCaptions] = useState(false);
+  const [burnSuccessMessage, setBurnSuccessMessage] = useState<string | null>(null);
 
   React.useEffect(() => {
     setLocalClip(clip);
+    if (clip) {
+      setCaptionStyle(clip.caption_style || "ACID");
+      setCaptionPosition(clip.caption_position || "BOTTOM");
+      setCaptionPhrases(clip.caption_phrases || []);
+    }
   }, [clip]);
 
   if (!isOpen || !localClip) return null;
@@ -98,6 +116,36 @@ export default function ContentPackModal({
     navigator.clipboard.writeText(text);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleBurnCaptions = async () => {
+    if (!localClip) return;
+    setBurningCaptions(true);
+    setBurnSuccessMessage(null);
+    try {
+      const res = await burnCaptions(localClip.id, {
+        style: captionStyle,
+        position: captionPosition,
+        enable_active_highlight: enableActiveHighlight,
+        phrases: captionPhrases,
+      });
+      if (res && res.clip) {
+        setLocalClip(res.clip);
+        if (onClipUpdated) onClipUpdated(res.clip);
+        setBurnSuccessMessage(`Captions burned in ${captionStyle} style!`);
+        setTimeout(() => setBurnSuccessMessage(null), 3500);
+      }
+    } catch (e: any) {
+      alert(`Caption burning failed: ${e.message}`);
+    } finally {
+      setBurningCaptions(false);
+    }
+  };
+
+  const handlePhraseTextChange = (phraseIdx: number, newText: string) => {
+    setCaptionPhrases((prev) =>
+      prev.map((p, idx) => (idx === phraseIdx ? { ...p, text: newText } : p))
+    );
   };
 
   const handleSelectHook = async (hookText: string) => {
@@ -335,6 +383,7 @@ export default function ContentPackModal({
               {[
                 { id: "hooks", label: "10 HOOKS", icon: Flame },
                 { id: "posts", label: "5 PLATFORMS", icon: Share2 },
+                { id: "captions", label: "CAPTION STUDIO", icon: Type },
                 { id: "seo", label: "SEO PACK", icon: Search },
                 { id: "translate", label: "MULTILINGUAL", icon: Globe },
                 { id: "explain", label: "WHY THIS CLIP?", icon: HelpCircle },
@@ -492,6 +541,151 @@ export default function ContentPackModal({
                           #{tag.replace("#", "")}
                         </span>
                       ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: CAPTION STUDIO */}
+            {activeTab === "captions" && (
+              <div className="space-y-4 overflow-y-auto max-h-[460px] pr-1">
+                {/* Theme Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-mono font-bold text-[#09090B] uppercase flex items-center gap-1.5">
+                    <Palette className="w-3.5 h-3.5 text-[#09090B]" />
+                    <span>CAPTION THEME & STYLE</span>
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { id: "ACID", name: "ACID (COOK)", desc: "Yellow karaoke highlight" },
+                      { id: "BOLD", name: "BOLD", desc: "Heavy white impact stroke" },
+                      { id: "MINIMAL", name: "MINIMAL", desc: "Clean modern typography" },
+                      { id: "CLASSIC", name: "CLASSIC", desc: "Yellow fill black border" },
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => setCaptionStyle(s.id)}
+                        className={`p-2.5 rounded-xl border-2 text-left transition-all flex flex-col gap-0.5 ${
+                          captionStyle === s.id
+                            ? "bg-[#D2E823] border-[#09090B] shadow-hard-xs"
+                            : "bg-[#F8F4E8] border-[#09090B]/30 hover:border-[#09090B]"
+                        }`}
+                      >
+                        <span className="font-display text-[11px] text-[#09090B] uppercase font-bold">{s.name}</span>
+                        <span className="text-[9px] font-mono text-[#09090B]/70">{s.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Position & Active-Word Toggle */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-mono font-bold text-[#09090B] uppercase flex items-center gap-1.5">
+                      <AlignVerticalJustifyCenter className="w-3.5 h-3.5 text-[#09090B]" />
+                      <span>POSITION (9:16 SAFE AREA)</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[
+                        { id: "BOTTOM", label: "BOTTOM", icon: AlignVerticalJustifyEnd },
+                        { id: "CENTER", label: "CENTER", icon: AlignVerticalJustifyCenter },
+                        { id: "TOP", label: "TOP", icon: AlignVerticalJustifyStart },
+                      ].map((pos) => {
+                        const Icon = pos.icon;
+                        return (
+                          <button
+                            key={pos.id}
+                            onClick={() => setCaptionPosition(pos.id)}
+                            className={`py-1.5 px-2 rounded-xl border-2 text-center text-xs font-mono font-bold uppercase transition-all flex items-center justify-center gap-1 ${
+                              captionPosition === pos.id
+                                ? "bg-[#09090B] text-[#D2E823] border-[#09090B] shadow-hard-xs"
+                                : "bg-[#F8F4E8] text-[#09090B] border-[#09090B]/30 hover:border-[#09090B]"
+                            }`}
+                          >
+                            <Icon className="w-3 h-3" />
+                            <span>{pos.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 bg-[#F8F4E8] rounded-xl border-2 border-[#09090B]">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-display text-[#09090B] uppercase">KARAOKE ACTIVE-WORD SYNC</span>
+                      <p className="text-[10px] font-mono text-[#09090B]/70">Highlights active spoken word in #D2E823</p>
+                    </div>
+                    <button
+                      onClick={() => setEnableActiveHighlight(!enableActiveHighlight)}
+                      className={`w-11 h-6 rounded-full border-2 border-[#09090B] transition-colors relative ${
+                        enableActiveHighlight ? "bg-[#D2E823]" : "bg-zinc-300"
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full bg-[#09090B] transition-transform absolute top-0.5 ${
+                          enableActiveHighlight ? "left-5" : "left-0.5"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Phrase Editor Section */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-mono font-bold text-[#09090B] uppercase">
+                      EDIT SPOKEN PHRASES ({captionPhrases.length})
+                    </label>
+                    <span className="text-[10px] font-mono text-[#09090B]/60 font-semibold">Click text to edit words</span>
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 p-2 bg-[#F8F4E8] rounded-xl border-2 border-[#09090B]">
+                    {captionPhrases.length === 0 ? (
+                      <div className="p-4 text-center text-xs font-mono text-[#09090B]/60">
+                        No phrases extracted yet. Click Re-burn to generate standard timed phrases.
+                      </div>
+                    ) : (
+                      captionPhrases.map((phrase, pIdx) => (
+                        <div
+                          key={pIdx}
+                          className="p-2 bg-white rounded-lg border border-[#09090B]/30 hover:border-[#09090B] space-y-1"
+                        >
+                          <div className="flex items-center justify-between text-[10px] font-mono">
+                            <span className="bg-[#09090B] text-[#D2E823] px-1.5 py-0.2 rounded font-bold">
+                              #{phrase.index || pIdx + 1}
+                            </span>
+                            <span className="text-[#09090B]/70 font-semibold">
+                              {Number(phrase.start || 0).toFixed(2)}s → {Number(phrase.end || 0).toFixed(2)}s
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            value={phrase.text || ""}
+                            onChange={(e) => handlePhraseTextChange(pIdx, e.target.value)}
+                            className="w-full text-xs font-mono font-bold p-1.5 bg-[#F8F4E8] rounded border border-[#09090B]/30 focus:border-[#09090B] focus:outline-none"
+                          />
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Re-Burn Captions Action Button */}
+                <div className="space-y-2 pt-1">
+                  <button
+                    onClick={handleBurnCaptions}
+                    disabled={burningCaptions}
+                    className="btn-neo-primary w-full py-3 text-xs flex items-center justify-center gap-2 font-display uppercase tracking-wider"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${burningCaptions ? "animate-spin text-[#D2E823]" : "text-[#D2E823]"}`} />
+                    <span>{burningCaptions ? "BURNING ASS CAPTIONS WITH FFMPEG..." : "RE-BURN CAPTIONS INTO 9:16 →"}</span>
+                  </button>
+
+                  {burnSuccessMessage && (
+                    <div className="p-2 bg-[#D2E823] text-[#09090B] rounded-lg border-2 border-[#09090B] text-center text-xs font-mono font-bold flex items-center justify-center gap-1.5 animate-in fade-in">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>{burnSuccessMessage}</span>
                     </div>
                   )}
                 </div>

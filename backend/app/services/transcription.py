@@ -171,7 +171,7 @@ class TranscriptionService:
     @staticmethod
     def _transcribe_with_gemini(audio_path: Path) -> Optional[Dict[str, Any]]:
         """
-        Uses Google Gemini 1.5/2.0 API to transcribe audio and output structured timestamped JSON.
+        Uses Google Gemini 2.0/1.5 Flash Audio API to transcribe audio and output structured timestamped JSON.
         """
         if not GEMINI_API_KEY:
             return None
@@ -179,14 +179,14 @@ class TranscriptionService:
         with open(audio_path, "rb") as f:
             audio_bytes = f.read()
 
-        # Limit payload for direct inline data
+        # Limit payload for direct inline data (20MB)
         if len(audio_bytes) > 20 * 1024 * 1024:
             print("[TRANSCRIPTION] Audio file too large for direct Gemini inline base64 payload.")
             return None
 
         audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
         
         prompt = (
             "Transcribe this audio file completely with high accuracy. "
@@ -229,35 +229,38 @@ class TranscriptionService:
         }
 
         with httpx.Client(timeout=90.0) as client:
-            resp = client.post(url, json=payload)
-            if resp.status_code != 200:
-                print(f"[TRANSCRIPTION] Gemini API returned {resp.status_code}: {resp.text[:200]}")
-                return None
-                
-            data = resp.json()
-            candidates = data.get("candidates", [])
-            if not candidates:
-                return None
-                
-            raw_content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
-            cleaned_json = re.sub(r"^```json\s*|\s*```$", "", raw_content.strip())
-            parsed = json.loads(cleaned_json)
-            
-            segments = parsed.get("segments", [])
-            all_words = []
-            for seg in segments:
-                for w in seg.get("words", []):
-                    all_words.append(w)
-            
-            return {
-                "text": parsed.get("text", ""),
-                "language": parsed.get("language", "en"),
-                "duration": round(segments[-1].get("end", 0.0), 2) if segments else 0.0,
-                "segments": segments,
-                "words": all_words,
-                "word_count": len(all_words) if all_words else len(parsed.get("text", "").split()),
-                "engine": "gemini-1.5-flash-audio"
-            }
+            for model_name in models_to_try:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+                    resp = client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if not candidates:
+                            continue
+                            
+                        raw_content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
+                        cleaned_json = re.sub(r"^```json\s*|\s*```$", "", raw_content.strip())
+                        parsed = json.loads(cleaned_json)
+                        
+                        segments = parsed.get("segments", [])
+                        all_words = []
+                        for seg in segments:
+                            for w in seg.get("words", []):
+                                all_words.append(w)
+                        
+                        return {
+                            "text": parsed.get("text", ""),
+                            "language": parsed.get("language", "en"),
+                            "duration": round(segments[-1].get("end", 0.0), 2) if segments else 0.0,
+                            "segments": segments,
+                            "words": all_words,
+                            "word_count": len(all_words) if all_words else len(parsed.get("text", "").split()),
+                            "engine": f"{model_name}-audio"
+                        }
+                except Exception as model_err:
+                    print(f"[TRANSCRIPTION] Gemini {model_name} attempt failed: {model_err}")
+        return None
 
     @staticmethod
     def _transcribe_acoustic_fallback(audio_path: Path) -> Dict[str, Any]:

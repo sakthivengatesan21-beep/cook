@@ -221,40 +221,58 @@ def _extract_keywords_and_topic(transcript_text: str) -> Tuple[str, List[str], s
         
     return topic, hashtags[:6], category
 
+def _clean_hook_core(transcript_text: str, topic: str) -> Tuple[str, str]:
+    """
+    Extracts a concise opening concept (5-10 words) and clean core focus.
+    """
+    sentences = [s.strip() for s in re.split(r"[.?!]", transcript_text) if len(s.strip()) > 6]
+    first_raw = sentences[0] if sentences else transcript_text[:70]
+    
+    # Clean leading conversational filler
+    clean = re.sub(r"^(and|but|so|like|well|you know|i mean|look|listen|now)\b[\s,]*", "", first_raw, flags=re.IGNORECASE).strip()
+    
+    # Truncate to reasonable sentence clause
+    words = clean.split()
+    if len(words) > 10:
+        clean_short = " ".join(words[:10]).rstrip(",;:-")
+    else:
+        clean_short = clean.rstrip(".!?,")
+
+    core_words = [w for w in re.findall(r"\b\w+\b", clean) if len(w) > 2]
+    core = " ".join(core_words[:5]) if core_words else topic
+    return clean_short, core
+
 def _generate_10_smart_hooks(
     moment_transcript: str,
     topic: str
 ) -> List[HookItem]:
     """
-    Generates 10 distinct viral hook angles strictly derived from the moment's spoken words.
+    Generates 10 distinct, natural, viral hook angles strictly derived from the moment's spoken words.
     """
-    sentences = [s.strip() for s in re.split(r"[.?!]", moment_transcript) if len(s.strip()) > 8]
-    first = sentences[0] if sentences else moment_transcript[:80]
-    words = [w for w in re.findall(r"\b\w+\b", first) if len(w) > 2]
-    core = " ".join(words[:6]) if words else topic
+    clean_short, core = _clean_hook_core(moment_transcript, topic)
 
     return [
         HookItem(
             type="CURIOSITY",
-            text=f"The real reason why {first.lower().rstrip('.')}...",
+            text=f"The truth about why {clean_short.lower()}",
             attention_score=96,
-            clarity_score=91,
+            clarity_score=94,
             style_match=95,
-            reason="Opens an irresistible open loop anchored in the spoken premise."
+            reason="Opens an irresistible open loop anchored directly in the spoken premise."
         ),
         HookItem(
             type="CONTRARIAN",
-            text=f"Stop doing this. {first.rstrip('.')} is completely misunderstood.",
+            text=f"Stop believing the myth about {core.lower()}.",
             attention_score=94,
-            clarity_score=93,
+            clarity_score=95,
             style_match=94,
             reason="Directly challenges common misconceptions with creator authority."
         ),
         HookItem(
             type="QUESTION",
-            text=f"Have you ever noticed that {first.lower().rstrip('.')}?",
-            attention_score=90,
-            clarity_score=95,
+            text=f"Did you know that {clean_short.lower()}?",
+            attention_score=91,
+            clarity_score=96,
             style_match=92,
             reason="Piques instant introspection and high comment engagement."
         ),
@@ -262,55 +280,55 @@ def _generate_10_smart_hooks(
             type="BOLD_CLAIM",
             text=f"This 1 insight about {core.lower()} changes everything.",
             attention_score=95,
-            clarity_score=92,
+            clarity_score=93,
             style_match=96,
             reason="High-conviction promise backed by the upcoming spoken payoff."
         ),
         HookItem(
             type="STORY",
-            text=f"It took me years to realize: {first.lower().rstrip('.')}.",
+            text=f"Most people never realize this: {clean_short.lower()}.",
             attention_score=93,
-            clarity_score=89,
+            clarity_score=92,
             style_match=94,
-            reason="Personal narrative frame establishing deep creator empathy."
+            reason="Personal narrative frame establishing curiosity and creator empathy."
         ),
         HookItem(
             type="PROBLEM",
             text=f"The #1 mistake people make with {core.lower()}:",
             attention_score=92,
-            clarity_score=94,
+            clarity_score=95,
             style_match=93,
             reason="Points out a high-stakes problem that viewers urgently want to avoid."
         ),
         HookItem(
             type="OUTCOME",
             text=f"How to master {core.lower()} in under 60 seconds:",
-            attention_score=91,
+            attention_score=92,
             clarity_score=96,
-            style_match=92,
+            style_match=93,
             reason="Promise of rapid transformation with zero friction."
         ),
         HookItem(
             type="EMOTIONAL",
-            text=f"Nobody talks about the hard truth behind {first.lower().rstrip('.')}.",
+            text=f"Nobody talks about the hard reality of {core.lower()}.",
             attention_score=94,
-            clarity_score=90,
+            clarity_score=91,
             style_match=95,
             reason="Appeals to vulnerable reality and high emotional resonance."
         ),
         HookItem(
             type="STATISTICAL",
-            text=f"99% of creators overlook this fact about {core.lower()}:",
-            attention_score=92,
-            clarity_score=93,
-            style_match=91,
+            text=f"99% of people get this wrong about {core.lower()}:",
+            attention_score=93,
+            clarity_score=94,
+            style_match=92,
             reason="Leverages algorithmic fascination with high-percentage patterns."
         ),
         HookItem(
             type="PATTERN_INTERRUPT",
-            text=f"Wait! Before you scroll: {first.rstrip('.')}.",
+            text=f"Wait! Watch this before you move forward:",
             attention_score=97,
-            clarity_score=88,
+            clarity_score=90,
             style_match=96,
             reason="Immediate scroll-stopping verbal hook designed for TikTok & Reels."
         )
@@ -326,39 +344,54 @@ def _generate_platform_remixes(
     Formats the moment into tailored, platform-specific copy (Instagram, TikTok, Shorts, LinkedIn, X).
     """
     clean_hash = " ".join(hashtags)
-    snippet = transcript[:240].strip()
+    sentences = [s.strip() for s in re.split(r"[.?!]", transcript) if len(s.strip()) > 10]
+    
+    # Extract distinct points for breakdown rather than duplicating hook
+    point1 = sentences[0] if len(sentences) > 0 else transcript[:90]
+    point2 = sentences[1] if len(sentences) > 1 else ""
+    point3 = sentences[2] if len(sentences) > 2 else ""
+
+    takeaways = []
+    if point1:
+        takeaways.append(f"• {point1}")
+    if point2:
+        takeaways.append(f"• {point2}")
+    if point3:
+        takeaways.append(f"• {point3}")
+    takeaways_text = "\n".join(takeaways) if takeaways else f"• {transcript[:160]}..."
 
     return {
         "instagram": (
             f"✨ {hook}\n\n"
-            f"💡 The Breakdown:\n"
-            f"\"{snippet}...\"\n\n"
-            f"Double tap if this resonates & save this for your next session! 📌\n\n"
-            f"{clean_hash} #InstaReels #CreatorTips"
+            f"💡 Key Takeaways:\n"
+            f"{takeaways_text}\n\n"
+            f"Double tap if you agree & save this for later! 📌\n\n"
+            f"{clean_hash} #InstaReels #CreatorMindset #DailyMotivation"
         ),
         "tiktok": (
             f"{hook} 🤯\n\n"
-            f"Watch till the end for the full breakdown! Drop your take in the comments 👇\n\n"
-            f"{clean_hash} #TikTokTrends #FYP #ForYou"
+            f"Watch till the end for the full insight. What's your take on this? 👇\n\n"
+            f"{clean_hash} #TikTokTrends #FYP #ForYou #LearnOnTikTok"
         ),
         "shorts": (
-            f"{topic} (Must Watch Insight)\n\n"
+            f"{topic}\n\n"
             f"{hook}\n\n"
-            f"Subscribe for daily masterclasses in short-form creation! 🚀\n\n"
-            f"{clean_hash} #Shorts #YouTubeShorts"
+            f"🔔 Hit Subscribe for more daily masterclasses and short-form breakthroughs!\n\n"
+            f"{clean_hash} #Shorts #YouTubeShorts #ViralVideo"
         ),
         "linkedin": (
-            f"Executive Takeaway: {topic}\n\n"
-            f"In today's fast-moving environment, many professionals assume one thing when reality suggests another.\n\n"
-            f"Key takeaway from this discussion:\n"
-            f"→ \"{snippet}...\"\n\n"
-            f"What is your team's approach to this? Let's discuss in the comments.\n\n"
-            f"{clean_hash} #Leadership #Strategy #Innovation"
+            f"Insight on {topic}:\n\n"
+            f"{hook}\n\n"
+            f"In fast-paced environments, separating common assumptions from reality is essential.\n\n"
+            f"Core takeaway:\n"
+            f"{takeaways_text}\n\n"
+            f"How does your team navigate this? Let's discuss in the comments.\n\n"
+            f"{clean_hash} #Leadership #Strategy #ProfessionalGrowth"
         ),
         "x": (
             f"{hook}\n\n"
-            f"Key takeaway: \"{snippet[:160]}...\"\n\n"
-            f"What do you think? 🧵👇\n\n"
+            f"{point1}\n\n"
+            f"Agree or disagree? 🧵👇\n\n"
             f"{' '.join(hashtags[:3])}"
         )
     }

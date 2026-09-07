@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
@@ -11,7 +12,7 @@ def format_timestamp_ass(seconds: float) -> str:
     Formats seconds into ASS timestamp format: H:MM:SS.cs (centiseconds).
     Example: 0:01:23.45
     """
-    total_cs = int(round(seconds * 100))
+    total_cs = max(0, int(round(seconds * 100)))
     cs = total_cs % 100
     total_secs = total_cs // 100
     secs = total_secs % 60
@@ -28,73 +29,100 @@ class CaptionService:
         clip_end: float
     ) -> List[Dict[str, Any]]:
         """
-        Extracts words within the clip interval and normalizes timestamps relative to clip_start (0.0s).
+        Extracts words strictly within the clip interval and normalizes timestamps relative to clip_start (0.0s).
+        Filters out trailing partial words from previous sentences that started before clip_start.
         """
         clip_words = []
-        clip_duration = clip_end - clip_start
+        clip_duration = max(0.5, clip_end - clip_start)
 
         for seg in transcript_segments:
-            seg_start = seg.get("start", 0.0)
-            seg_end = seg.get("end", 0.0)
+            seg_start = float(seg.get("start", 0.0))
+            seg_end = float(seg.get("end", 0.0))
 
-            # Check overlap with clip window
-            if seg_end < clip_start or seg_start > clip_end:
+            # Skip segments with no overlap
+            if seg_end < clip_start - 0.1 or seg_start > clip_end + 0.1:
                 continue
 
             words = seg.get("words", [])
             if words:
                 for w in words:
-                    w_start = w.get("start", 0.0)
-                    w_end = w.get("end", w_start + 0.3)
-                    if w_end >= clip_start and w_start <= clip_end:
-                        rel_start = max(0.0, w_start - clip_start)
-                        rel_end = min(clip_duration, w_end - clip_start)
+                    w_text = str(w.get("word", "")).strip()
+                    if not w_text:
+                        continue
+                        
+                    w_start = float(w.get("start", 0.0))
+                    w_end = float(w.get("end", w_start + 0.25))
+                    w_mid = (w_start + w_end) / 2.0
+
+                    # Word boundary filter:
+                    # Exclude words that clearly belong to the previous sentence (started >0.08s before clip_start)
+                    if w_start < clip_start - 0.08 and w_end < clip_start + 0.15:
+                        continue
+                    if w_start > clip_end + 0.15:
+                        continue
+
+                    # Check if word falls in clip window
+                    if (w_end >= clip_start and w_start <= clip_end) or (clip_start <= w_mid <= clip_end):
+                        rel_start = max(0.0, round(w_start - clip_start, 2))
+                        rel_end = min(clip_duration, max(rel_start + 0.08, round(w_end - clip_start, 2)))
                         if rel_end > rel_start:
                             clip_words.append({
-                                "word": w.get("word", "").strip(),
-                                "start": round(rel_start, 2),
-                                "end": round(rel_end, 2),
-                                "probability": w.get("probability", 0.95)
+                                "word": w_text,
+                                "start": rel_start,
+                                "end": rel_end,
+                                "probability": float(w.get("probability", 0.95))
                             })
             else:
-                # Fallback: interpolate segment text into words
-                text = seg.get("text", "").strip()
+                # Segment-level fallback: interpolate text into words with accurate relative timing
+                text = str(seg.get("text", "")).strip()
                 tokens = text.split()
                 if tokens:
                     s_rel_start = max(0.0, seg_start - clip_start)
                     s_rel_end = min(clip_duration, seg_end - clip_start)
-                    dur = max(0.2, s_rel_end - s_rel_start)
+                    dur = max(0.3, s_rel_end - s_rel_start)
                     dt = dur / len(tokens)
                     for i, tok in enumerate(tokens):
-                        w_s = s_rel_start + i * dt
-                        w_e = s_rel_start + (i + 1) * dt
-                        if w_e > 0.0 and w_s < clip_duration:
+                        w_s = max(0.0, round(s_rel_start + i * dt, 2))
+                        w_e = min(clip_duration, round(s_rel_start + (i + 1) * dt, 2))
+                        if w_e > w_s and w_s < clip_duration:
                             clip_words.append({
                                 "word": tok.strip(),
-                                "start": round(w_s, 2),
-                                "end": round(w_e, 2),
+                                "start": w_s,
+                                "end": w_e,
                                 "probability": 0.95
                             })
 
         # Sort words chronologically
-        clip_words.sort(key=lambda x: x["start"])
-        return clip_words
+        clip_words.sort(key=lambda x: (x["start"], x["end"]))
+        
+        # Eliminate any micro-negative durations or duplicate starts
+        sanitized = []
+        for w in clip_words:
+            if not w["word"]:
+                continue
+            if sanitized and w["start"] < sanitized[-1]["start"]:
+                w["start"] = sanitized[-1]["start"]
+            if w["end"] <= w["start"]:
+                w["end"] = round(w["start"] + 0.15, 2)
+            sanitized.append(w)
+
+        return sanitized
 
     @staticmethod
     def chunk_words_into_phrases(
         words: List[Dict[str, Any]],
         max_words_per_phrase: int = 4,
-        max_phrase_duration: float = 2.2
+        max_phrase_duration: float = 2.0
     ) -> List[Dict[str, Any]]:
         """
         Chunks words into punchy 2-5 word short-form caption lines optimized for TikTok/Reels/Shorts.
+        Enforces strictly monotonic, non-overlapping time intervals.
         """
         if not words:
             return []
 
-        phrases = []
+        raw_phrases = []
         current_words = []
-        phrase_idx = 1
 
         for idx, w in enumerate(words):
             current_words.append(w)
@@ -108,7 +136,7 @@ class CaptionService:
             next_has_gap = False
             if idx + 1 < len(words):
                 next_w = words[idx + 1]
-                if next_w["start"] - w["end"] > 0.4:
+                if next_w["start"] - w["end"] >= 0.35:
                     next_has_gap = True
 
             should_break = (
@@ -122,22 +150,62 @@ class CaptionService:
             if should_break and current_words:
                 p_start = current_words[0]["start"]
                 p_end = current_words[-1]["end"]
-                # Ensure minimum visible duration of 0.8s for readability
-                if p_end - p_start < 0.8:
-                    p_end = p_start + 0.8
+                # Minimum duration of 0.6s for readability
+                if p_end - p_start < 0.6:
+                    p_end = round(p_start + 0.6, 2)
 
                 p_text = " ".join([cw["word"] for cw in current_words])
-                phrases.append({
-                    "index": phrase_idx,
-                    "start": round(p_start, 2),
-                    "end": round(p_end, 2),
+                raw_phrases.append({
+                    "start": p_start,
+                    "end": p_end,
                     "text": p_text,
                     "words": list(current_words)
                 })
-                phrase_idx += 1
                 current_words = []
 
-        return phrases
+        if not raw_phrases:
+            return []
+
+        # Enforce strict non-overlapping intervals and smooth transitions
+        final_phrases = []
+        for i, p in enumerate(raw_phrases):
+            p_start = p["start"]
+            p_end = p["end"]
+
+            if i + 1 < len(raw_phrases):
+                next_start = raw_phrases[i + 1]["start"]
+                # If current phrase ends after next phrase begins, clip it
+                if p_end > next_start:
+                    p_end = max(round(p_start + 0.3, 2), next_start)
+                # If tiny gap (<0.2s), bridge it so subtitles don't flash off and on
+                elif next_start - p_end < 0.2:
+                    p_end = next_start
+
+            # Make sure start < end
+            if p_end <= p_start:
+                p_end = round(p_start + 0.4, 2)
+
+            # Adjust word timestamps within phrase boundaries
+            adjusted_words = []
+            for w in p["words"]:
+                w_s = max(p_start, min(p_end - 0.05, w["start"]))
+                w_e = min(p_end, max(w_s + 0.05, w["end"]))
+                adjusted_words.append({
+                    "word": w["word"],
+                    "start": round(w_s, 2),
+                    "end": round(w_e, 2),
+                    "probability": w.get("probability", 0.95)
+                })
+
+            final_phrases.append({
+                "index": i + 1,
+                "start": round(p_start, 2),
+                "end": round(p_end, 2),
+                "text": p["text"],
+                "words": adjusted_words
+            })
+
+        return final_phrases
 
     @staticmethod
     def generate_ass_file(
@@ -149,11 +217,10 @@ class CaptionService:
     ) -> Path:
         """
         Generates ASS (Advanced SubStation Alpha) subtitle file with custom typography,
-        safe-area margins, and optional active-word highlighting.
+        safe-area margins, and continuous flicker-free active-word karaoke highlighting.
         """
         output_ass_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Determine alignment & margins based on position
         # ASS Alignment: 2 = Bottom Center, 5 = Center, 8 = Top Center
         pos_upper = position.upper()
         if pos_upper == "TOP":
@@ -166,40 +233,48 @@ class CaptionService:
             alignment = 2
             margin_v = 240  # Safe from TikTok/Reels bottom captions & audio title UI
 
-        # Styles configuration
+        # Styles configuration (colors in ASS format: &HAABBGGRR)
         style_upper = style.upper()
         if style_upper == "BOLD":
             font_name = "Impact"
             font_size = 72
             primary_color = "&H00FFFFFF" # White
             outline_color = "&H00000000" # Black
-            outline_size = 5
-            shadow_size = 2
+            outline_size = 5.0
+            shadow_size = 2.0
             active_color = "&H00FFFFFF"
+            highlight_color_tag = r"{\c&HFFFFFF&}"
+            base_color_tag = r"{\c&HFFFFFF&}"
         elif style_upper == "MINIMAL":
             font_name = "Arial"
             font_size = 56
             primary_color = "&H00FFFFFF"
             outline_color = "&H00000000"
-            outline_size = 2
-            shadow_size = 2
-            active_color = "&H00D2E823"
+            outline_size = 2.5
+            shadow_size = 1.5
+            active_color = "&H0023E8D2"  # Acid Yellow-Green
+            highlight_color_tag = r"{\c&H23E8D2&}"
+            base_color_tag = r"{\c&HFFFFFF&}"
         elif style_upper == "CLASSIC":
             font_name = "Arial Black"
             font_size = 64
             primary_color = "&H0000E6FF" # Yellow in ASS BGR
             outline_color = "&H00000000"
-            outline_size = 4
-            shadow_size = 2
+            outline_size = 4.0
+            shadow_size = 2.0
             active_color = "&H00FFFFFF"
+            highlight_color_tag = r"{\c&H00E6FF&}"
+            base_color_tag = r"{\c&H00E6FF&}"
         else: # ACID Default (Signature COOK Acid Yellow)
             font_name = "Impact"
             font_size = 66
-            primary_color = "&H00F8F4E8" # Warm cream white
+            primary_color = "&H00F8F4E8" # Warm cream white (&H00E8F4F8 in BGR)
             outline_color = "&H00000000" # Solid black outline
             outline_size = 4.5
             shadow_size = 2.5
             active_color = "&H0023E8D2"  # #D2E823 (Acid Yellow-Green in ASS BGR)
+            highlight_color_tag = r"{\c&H23E8D2&}"
+            base_color_tag = r"{\c&HE8F4F8&}"
 
         ass_header = f"""[Script Info]
 Title: COOK Short-Form Captions
@@ -225,32 +300,38 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             p_start = p["start"]
             p_end = p["end"]
 
-            # If active-word highlighting is enabled and we have word timestamps
-            if enable_active_highlight and style_upper == "ACID" and len(p_words) > 1:
-                # Generate granular word highlight events for each word in the phrase
+            # If active-word karaoke is enabled and we have multiple words with timestamps
+            if enable_active_highlight and style_upper in ["ACID", "MINIMAL"] and len(p_words) > 1:
+                # Create continuous contiguous slices across [p_start, p_end] so phrase NEVER flickers
                 for w_idx, active_w in enumerate(p_words):
-                    w_start = active_w["start"]
-                    w_end = active_w["end"]
+                    # Slice start: first word starts at p_start, otherwise at active_w start
+                    slice_start = p_start if w_idx == 0 else active_w["start"]
                     
-                    # Bound highlight window
+                    # Slice end: last word ends at p_end, otherwise at next word's start
                     if w_idx == len(p_words) - 1:
-                        w_end = p_end
+                        slice_end = p_end
+                    else:
+                        slice_end = max(slice_start + 0.1, p_words[w_idx + 1]["start"])
+
+                    # Ensure slice duration is valid
+                    if slice_end <= slice_start:
+                        slice_end = slice_start + 0.15
 
                     ass_tokens = []
                     for idx, w in enumerate(p_words):
                         clean_word = w["word"].upper()
                         if idx == w_idx:
-                            # Highlight active word in Acid Yellow
-                            ass_tokens.append(r"{\c&H23E8D2&}" + clean_word + r"{\c&HFFFFFF&}")
+                            # Active word in highlight color, then restore base color
+                            ass_tokens.append(f"{highlight_color_tag}{clean_word}{base_color_tag}")
                         else:
                             ass_tokens.append(clean_word)
 
                     line_text = " ".join(ass_tokens)
-                    start_str = format_timestamp_ass(w_start)
-                    end_str = format_timestamp_ass(w_end)
+                    start_str = format_timestamp_ass(slice_start)
+                    end_str = format_timestamp_ass(slice_end)
                     dialogue_lines.append(f"Dialogue: 0,{start_str},{end_str},CookCaptionStyle,,0,0,0,,{line_text}")
             else:
-                # Static phrase line
+                # Single continuous phrase display
                 start_str = format_timestamp_ass(p_start)
                 end_str = format_timestamp_ass(p_end)
                 clean_text = p["text"].upper()
@@ -288,7 +369,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         """
         Burns styled ASS subtitles onto 9:16 vertical video with FFmpeg.
         Preserves video stream quality and copies audio stream verbatim.
-        Safely falls back to uncaptioned video if subtitle burning times out or encounters errors.
+        Properly escapes Windows paths for FFmpeg filtergraphs.
         """
         output_captioned_clip.parent.mkdir(parents=True, exist_ok=True)
         
@@ -298,17 +379,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             shutil.copyfile(input_vertical_clip, output_captioned_clip)
             return True
 
-        # In FFmpeg -vf ass=path, use relative posix path to avoid Windows drive-letter colon parsing bugs
+        # Format subtitle path safely for FFmpeg filtergraph (escape colon on Windows)
+        # e.g., C\:/path/to/file.ass
+        abs_ass = str(ass_subtitle_path.resolve()).replace("\\", "/")
+        escaped_ass = abs_ass.replace(":", "\\:")
+        
+        # Try relative path first if feasible
         try:
-            posix_ass = ass_subtitle_path.relative_to(Path.cwd()).as_posix()
+            rel_ass = ass_subtitle_path.relative_to(Path.cwd()).as_posix().replace(":", "\\:")
+            filter_ass_path = rel_ass
         except Exception:
-            posix_ass = f"outputs/{ass_subtitle_path.name}"
+            filter_ass_path = escaped_ass
         
         args = [
             "-i", str(input_vertical_clip),
-            "-vf", f"ass={posix_ass}",
+            "-vf", f"ass='{filter_ass_path}'",
             "-c:v", "libx264",
             "-preset", "ultrafast",
+            "-crf", "22",
             "-pix_fmt", "yuv420p",
             "-threads", "2"
         ]
@@ -323,17 +411,40 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         
         try:
             res = run_ffmpeg(args, timeout=timeout)
-            if res.returncode == 0 and output_captioned_clip.exists() and output_captioned_clip.stat().st_size > 0:
+            if res.returncode == 0 and output_captioned_clip.exists() and output_captioned_clip.stat().st_size > 1000:
                 return True
         except Exception as e:
-            print(f"[BURN CAPTIONS] FFmpeg burning warning: {e}")
+            print(f"[BURN CAPTIONS] FFmpeg ass burning attempt 1 failed ({e}), trying subtitles filter...")
 
-        # Safe fallback: copy uncaptioned vertical clip so exported video is never broken
+        # Fallback: try subtitles filter with absolute escaped path
+        try:
+            args_sub = [
+                "-i", str(input_vertical_clip),
+                "-vf", f"subtitles='{escaped_ass}'",
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-crf", "22",
+                "-pix_fmt", "yuv420p",
+                "-threads", "2"
+            ]
+            if info.get("has_audio", False):
+                args_sub += ["-c:a", "copy"]
+            else:
+                args_sub += ["-an"]
+            args_sub.append(str(output_captioned_clip))
+            
+            res2 = run_ffmpeg(args_sub, timeout=timeout)
+            if res2.returncode == 0 and output_captioned_clip.exists() and output_captioned_clip.stat().st_size > 1000:
+                return True
+        except Exception as e2:
+            print(f"[BURN CAPTIONS] Subtitles filter fallback failed: {e2}")
+
+        # Final safe fallback: copy uncaptioned vertical clip so user always has a playable video
         try:
             shutil.copyfile(input_vertical_clip, output_captioned_clip)
             return output_captioned_clip.exists() and output_captioned_clip.stat().st_size > 0
         except Exception as copy_err:
-            print(f"[BURN CAPTIONS] Copy fallback failed: {copy_err}")
+            print(f"[BURN CAPTIONS] Critical copy fallback failed: {copy_err}")
             return False
 
 caption_service = CaptionService()

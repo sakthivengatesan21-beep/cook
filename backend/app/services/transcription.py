@@ -21,15 +21,15 @@ def get_whisper_model():
     
     try:
         from faster_whisper import WhisperModel
-        print("[TRANSCRIPTION] Attempting to load faster-whisper 'base' model on CPU...")
+        print("[TRANSCRIPTION] Loading faster-whisper 'tiny' model on CPU (int8)...")
         try:
-            _whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
-            print("[TRANSCRIPTION] faster-whisper 'base' model loaded successfully.")
-            return _whisper_model
-        except Exception as e_base:
-            print(f"[TRANSCRIPTION] 'base' model failed ({e_base}), trying faster-whisper 'tiny' model...")
-            _whisper_model = WhisperModel("tiny", device="cpu", compute_type="int8")
+            _whisper_model = WhisperModel("tiny", device="cpu", compute_type="int8", cpu_threads=2)
             print("[TRANSCRIPTION] faster-whisper 'tiny' model loaded successfully.")
+            return _whisper_model
+        except Exception as e_tiny:
+            print(f"[TRANSCRIPTION] 'tiny' model load warning ({e_tiny}), trying 'base' model...")
+            _whisper_model = WhisperModel("base", device="cpu", compute_type="int8", cpu_threads=2)
+            print("[TRANSCRIPTION] faster-whisper 'base' model loaded successfully.")
             return _whisper_model
     except Exception as e:
         print(f"[TRANSCRIPTION WARNING] faster-whisper is unavailable: {e}")
@@ -109,11 +109,11 @@ class TranscriptionService:
             except Exception as e:
                 print(f"[TRANSCRIPTION WARNING] OpenAI Whisper API fallback failed: {e}")
 
-        # TIER 3: Local faster-whisper (Only on local machine with strict 10s timeout, never hangs on cloud)
-        if not is_cloud and os.getenv("DISABLE_LOCAL_WHISPER", "false").lower() != "true":
+        # TIER 3: Universal faster-whisper (Runs fast on both cloud and local machines)
+        if os.getenv("DISABLE_LOCAL_WHISPER", "false").lower() != "true":
             try:
                 import concurrent.futures
-                print(f"[TRANSCRIPTION] Checking local faster-whisper with 10s strict timeout: {audio_path.name}")
+                print(f"[TRANSCRIPTION] Transcribing audio with faster-whisper ('tiny' int8 CPU): {audio_path.name}")
                 
                 def _run_whisper():
                     model = get_whisper_model()
@@ -143,26 +143,29 @@ class TranscriptionService:
                                         all_words.append(w_obj)
                             segments.append({"start": round(seg.start, 2), "end": round(seg.end, 2), "text": clean_text, "confidence": 0.95, "words": seg_words})
                             full_text_parts.append(clean_text)
+                    
+                    detected_lang = info.language if hasattr(info, 'language') and info.language else "en"
                     return {
                         "text": " ".join(full_text_parts).strip(),
-                        "language": info.language if hasattr(info, 'language') and info.language else "en",
+                        "language": detected_lang,
                         "duration": round(info.duration if hasattr(info, 'duration') and info.duration else 0.0, 2),
                         "segments": segments,
                         "words": all_words,
                         "word_count": len(all_words),
-                        "engine": "faster-whisper"
+                        "engine": f"faster-whisper-{detected_lang}"
                     }
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(_run_whisper)
-                    res = future.result(timeout=10.0)
+                    res = future.result(timeout=60.0)
                     if res and (res.get("segments") or res.get("text")):
+                        print(f"[TRANSCRIPTION COMPLETE] Transcribed {len(res['words'])} words with faster-whisper in {round(time.time() - start_time, 2)}s.")
                         return res
             except Exception as e:
-                print(f"[TRANSCRIPTION] Local faster-whisper skipped/timed out: {e}")
+                print(f"[TRANSCRIPTION WARNING] faster-whisper execution error: {e}")
 
-        # TIER 4: Acoustic Energy Segmentation Fallback (Instant 0.1s execution)
-        print("[TRANSCRIPTION] Running instant acoustic energy segmentation fallback (0.1s)...")
+        # TIER 4: Acoustic Energy Segmentation Fallback (Instant execution)
+        print("[TRANSCRIPTION] Running acoustic energy segmentation fallback...")
         return TranscriptionService._transcribe_acoustic_fallback(audio_path)
 
     @staticmethod
@@ -276,15 +279,7 @@ class TranscriptionService:
         else:
             duration = 60.0
 
-        sample_insights = [
-            "Crucial breakdown of the core strategy and high leverage tactics that create massive engagement.",
-            "Mastering this foundational framework completely transforms your speed of execution.",
-            "Here is the exact method elite creators use to retain audience attention through the entire video.",
-            "Analyzing the key takeaways and critical inflection points that drive viral reach.",
-            "Actionable insights and practical steps to immediately elevate your production quality."
-        ]
-
-        chunk_dur = 5.0
+        chunk_dur = 6.0
         num_chunks = max(1, int(duration // chunk_dur))
         segments = []
         all_words = []
@@ -293,7 +288,7 @@ class TranscriptionService:
         for i in range(num_chunks):
             start = round(i * chunk_dur, 2)
             end = round(min(duration, (i + 1) * chunk_dur), 2)
-            seg_text = sample_insights[i % len(sample_insights)]
+            seg_text = f"Key Highlight #{i+1}"
             tokens = seg_text.split()
             dt = max(0.1, (end - start) / len(tokens))
             

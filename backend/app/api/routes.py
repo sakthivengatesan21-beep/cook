@@ -97,9 +97,19 @@ async def run_video_pipeline(video_id: str, user_id: str = ""):
         storage_path = video.get("storage_path") or get_original_video_storage_path(uid, video_id, ext)
         
         # 1. Verify storage object exists
+        temp_source_path = UPLOADS_DIR / f"{video_id}_source{ext}"
+        direct_source_path = Path(video.get("storage_url", "")) if video.get("storage_url") else (UPLOADS_DIR / f"{video_id}{ext}")
+        
         obj_exists, obj_size = supabase_service.check_storage_object_exists(BUCKET_ORIGINALS, storage_path)
         if not obj_exists:
-            raise FileNotFoundError(f"Storage object '{storage_path}' not found in bucket '{BUCKET_ORIGINALS}' or local disk.")
+            if direct_source_path.exists() and direct_source_path.is_file() and direct_source_path.stat().st_size > 0:
+                supabase_service.upload_file(BUCKET_ORIGINALS, storage_path, direct_source_path)
+                obj_exists, obj_size = True, direct_source_path.stat().st_size
+            elif temp_source_path.exists() and temp_source_path.is_file() and temp_source_path.stat().st_size > 0:
+                supabase_service.upload_file(BUCKET_ORIGINALS, storage_path, temp_source_path)
+                obj_exists, obj_size = True, temp_source_path.stat().st_size
+            else:
+                raise FileNotFoundError(f"Storage object '{storage_path}' not found in bucket '{BUCKET_ORIGINALS}' or local disk.")
         
         print(f"[COOK VALIDATION] storage object found: bucket={BUCKET_ORIGINALS} path={storage_path} size={obj_size} bytes")
 

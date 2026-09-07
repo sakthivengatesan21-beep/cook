@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 import imageio_ffmpeg
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 UPLOADS_DIR = BASE_DIR / "uploads"
 OUTPUTS_DIR = BASE_DIR / "outputs"
 DATA_DIR = BASE_DIR / "data"

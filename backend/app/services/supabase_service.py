@@ -142,8 +142,18 @@ class SupabaseService:
             vid_candidates = [
                 UPLOADS_DIR / norm_path,
                 OUTPUTS_DIR / norm_path,
-                UPLOADS_DIR / Path(norm_path).name
+                UPLOADS_DIR / Path(norm_path).name,
+                OUTPUTS_DIR / Path(norm_path).name,
             ]
+            parts = norm_path.split("/")
+            if len(parts) >= 2:
+                vid_id = parts[-2]
+                for e in [".mp4", ".mov", ".webm", ".mkv", ".wav", ".aac", ".json"]:
+                    vid_candidates.append(UPLOADS_DIR / f"{vid_id}{e}")
+                    vid_candidates.append(UPLOADS_DIR / f"{vid_id}_source{e}")
+                    vid_candidates.append(OUTPUTS_DIR / f"{vid_id}{e}")
+                    vid_candidates.append(DATA_DIR / f"{vid_id}{e}")
+
             for c in vid_candidates:
                 if c.exists() and c.is_file() and c.stat().st_size > 0:
                     exists = True

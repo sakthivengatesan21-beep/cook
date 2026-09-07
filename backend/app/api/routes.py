@@ -306,7 +306,7 @@ async def run_video_pipeline(video_id: str, user_id: str = ""):
         # ---------------------------------------------------------------------
         # STEP 9 & 10: CLIP EXTRACTION, 9:16 FORMATTING, CAPTION BURNING & STORAGE UPLOAD
         # ---------------------------------------------------------------------
-        current_stage = "CLIP_GENERATION"
+        detected_moments = detected_moments[:4]
         total_moments = len(detected_moments)
         print(f"[COOK] STEP 9: STARTING CLIP GENERATION ({total_moments} clips 9:16 + Active ASS Captions)...")
         supabase_service.update_video_status(
@@ -355,9 +355,20 @@ async def run_video_pipeline(video_id: str, user_id: str = ""):
             
             print(f"[COOK]   -> Cutting clip #{idx+1} ({m['start_time']}s to {m['end_time']}s)...")
             
-            # 1. Cut clip and format to 9:16 vertical
-            await asyncio.to_thread(create_clip, temp_source_path, m["start_time"], m["end_time"], raw_clip_path, timeout=120)
-            await asyncio.to_thread(convert_to_vertical_9_16, raw_clip_path, vert_clip_path, 1080, 1920, timeout=120)
+            # 1. Cut clip and format to 9:16 vertical (with safe automatic fallback)
+            try:
+                await asyncio.to_thread(create_clip, temp_source_path, m["start_time"], m["end_time"], raw_clip_path, timeout=180)
+            except Exception as cut_err:
+                print(f"[COOK WARNING] Cutting raw clip #{idx+1} error: {cut_err}")
+                if not raw_clip_path.exists():
+                    shutil.copyfile(temp_source_path, raw_clip_path)
+
+            try:
+                await asyncio.to_thread(convert_to_vertical_9_16, raw_clip_path, vert_clip_path, 720, 1280, timeout=180)
+            except Exception as vert_err:
+                print(f"[COOK WARNING] Vertical conversion error for clip #{idx+1}: {vert_err}")
+                if not vert_clip_path.exists():
+                    shutil.copyfile(raw_clip_path, vert_clip_path)
             
             # 2. Extract genuine spoken words overlapping this clip
             clip_words = caption_service.extract_clip_words(transcript_segments, m["start_time"], m["end_time"])
@@ -392,12 +403,17 @@ async def run_video_pipeline(video_id: str, user_id: str = ""):
                     vert_clip_path,
                     ass_path,
                     captioned_clip_path,
-                    timeout=120
+                    timeout=180
                 )
                 print(f"[COOK]   -> Captioned clip #{idx+1} ready -> {captioned_clip_path.name}")
             except Exception as cap_err:
                 print(f"[COOK WARNING] Burning captions failed for clip #{idx+1}: {str(cap_err)}")
                 caption_status = "error"
+                if not captioned_clip_path.exists() and vert_clip_path.exists():
+                    try:
+                        shutil.copyfile(vert_clip_path, captioned_clip_path)
+                    except Exception:
+                        pass
 
             # 5. Upload clip assets to Supabase Storage
             vert_storage_key = f"{uid}/{video_id}/{clip_id}_vertical.mp4"

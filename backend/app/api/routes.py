@@ -1046,6 +1046,33 @@ async def get_single_clip(clip_id: str):
         raise HTTPException(status_code=404, detail="Clip not found.")
     return clip
 
+@router.patch("/clips/{clip_id}")
+async def update_clip_metadata_endpoint(
+    clip_id: str,
+    body: ClipUpdateRequest,
+    user: Dict[str, Any] = Depends(get_current_user)
+):
+    update_data = body.model_dump(exclude_unset=True)
+    updated_clip = supabase_service.update_clip(clip_id, update_data, user["id"]) or storage.update_clip(clip_id, update_data)
+    if not updated_clip:
+        clip = supabase_service.get_clip_by_id(clip_id) or storage.get_clip_by_id(clip_id)
+        if not clip:
+            raise HTTPException(status_code=404, detail="Clip not found.")
+        if "metadata" not in clip or not clip["metadata"]:
+            clip["metadata"] = {}
+        if body.selected_hook is not None:
+            clip["metadata"]["selected_hook"] = body.selected_hook
+            clip["hook"] = body.selected_hook
+        if body.selected_title is not None:
+            clip["metadata"]["selected_title"] = body.selected_title
+            clip["topic"] = body.selected_title
+        if body.caption is not None:
+            clip["metadata"]["caption"] = body.caption
+        if body.hashtags is not None:
+            clip["metadata"]["hashtags"] = body.hashtags
+        updated_clip = clip
+    return {"success": True, "clip": updated_clip}
+
 @router.post("/clips/{clip_id}/burn-captions")
 async def burn_captions_endpoint(
     clip_id: str,
@@ -1137,6 +1164,65 @@ async def burn_captions_endpoint(
         "success": True,
         "clip": updated_clip,
         "message": f"Captions successfully re-rendered with {style} style at {position} position."
+    }
+
+@router.post("/clips/{clip_id}/regenerate")
+async def regenerate_clip_endpoint(
+    clip_id: str,
+    body: Optional[ClipRegenerateRequest] = None,
+    user: Dict[str, Any] = Depends(get_current_user)
+):
+    clip = supabase_service.get_clip_by_id(clip_id) or storage.get_clip_by_id(clip_id)
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found.")
+    return {"success": True, "clip": clip}
+
+@router.post("/demo")
+@router.post("/demo/setup")
+async def setup_demo_endpoint(
+    background_tasks: BackgroundTasks,
+    user: Dict[str, Any] = Depends(get_current_user)
+):
+    demo_vid_id = "demo_cook_master_01"
+    sample_mp4 = UPLOADS_DIR / "cook_sample_podcast.mp4"
+    if not sample_mp4.exists():
+        generate_sample_demo_video(sample_mp4, duration_sec=60, with_audio=True)
+    
+    video_record = {
+        "id": demo_vid_id,
+        "user_id": user["id"],
+        "project_id": None,
+        "filename": "COOK_Master_Podcast_Ep01.mp4",
+        "original_filename": "COOK_Master_Podcast_Ep01.mp4",
+        "storage_bucket": BUCKET_ORIGINALS,
+        "storage_path": f"{user['id']}/{demo_vid_id}/original.mp4",
+        "storage_url": str(sample_mp4),
+        "mime_type": "video/mp4",
+        "duration": 60.0,
+        "duration_seconds": 60.0,
+        "file_size": sample_mp4.stat().st_size if sample_mp4.exists() else 1024000,
+        "has_audio": True,
+        "audio_codec": "aac",
+        "video_codec": "h264",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "language": "en",
+        "status": VideoStatus.UPLOADED.value,
+        "stage": "UPLOADED",
+        "status_message": "Demo video initialized. Ready to cook.",
+        "progress": 10,
+        "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+    }
+    supabase_service.create_video(video_record)
+    storage.save_video(video_record)
+    
+    background_tasks.add_task(run_video_pipeline, demo_vid_id, user["id"])
+    return {
+        "success": True,
+        "video_id": demo_vid_id,
+        "job_id": demo_vid_id,
+        "video": video_record
     }
 
 @router.get("/download/{video_id}/zip")

@@ -49,3 +49,6 @@ scratch_test_files/
 *.swo
 .DS_Store
 Thumbs.db
+*.tsbuildinfo
+.pytest_cache/
+

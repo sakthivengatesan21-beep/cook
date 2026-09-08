@@ -23,12 +23,12 @@ def get_whisper_model():
         from faster_whisper import WhisperModel
         print("[TRANSCRIPTION] Loading faster-whisper 'tiny' model on CPU (int8)...")
         try:
-            _whisper_model = WhisperModel("tiny", device="cpu", compute_type="int8", cpu_threads=2)
+            _whisper_model = WhisperModel("tiny", device="cpu", compute_type="int8", cpu_threads=4)
             print("[TRANSCRIPTION] faster-whisper 'tiny' model loaded successfully.")
             return _whisper_model
         except Exception as e_tiny:
             print(f"[TRANSCRIPTION] 'tiny' model load warning ({e_tiny}), trying 'base' model...")
-            _whisper_model = WhisperModel("base", device="cpu", compute_type="int8", cpu_threads=2)
+            _whisper_model = WhisperModel("base", device="cpu", compute_type="int8", cpu_threads=4)
             print("[TRANSCRIPTION] faster-whisper 'base' model loaded successfully.")
             return _whisper_model
     except Exception as e:
@@ -129,14 +129,9 @@ class TranscriptionService:
         # TIER 4: Universal faster-whisper (Runs on CPU with multi-threading)
         if os.getenv("DISABLE_LOCAL_WHISPER", "false").lower() != "true":
             try:
-                import concurrent.futures
                 print(f"[TRANSCRIPTION] Transcribing audio with faster-whisper ('tiny' int8 CPU): {audio_path.name}")
-                
-                def _run_whisper():
-                    model = get_whisper_model()
-                    if model is None:
-                        return None
-                    
+                model = get_whisper_model()
+                if model is not None:
                     segments_list = []
                     info = None
 
@@ -194,7 +189,7 @@ class TranscriptionService:
                             full_text_parts.append(clean_text)
                     
                     detected_lang = info.language if (info and hasattr(info, 'language') and info.language) else "en"
-                    return {
+                    res = {
                         "text": " ".join(full_text_parts).strip(),
                         "language": detected_lang,
                         "duration": round(info.duration if (info and hasattr(info, 'duration') and info.duration) else 0.0, 2),
@@ -203,10 +198,6 @@ class TranscriptionService:
                         "word_count": len(all_words),
                         "engine": f"faster-whisper-{detected_lang}"
                     }
-
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(_run_whisper)
-                    res = future.result(timeout=90.0)
                     if res and (res.get("segments") or res.get("text")):
                         print(f"[TRANSCRIPTION COMPLETE] Transcribed {len(res['words'])} words with faster-whisper in {round(time.time() - start_time, 2)}s.")
                         return res

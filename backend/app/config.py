@@ -20,6 +20,7 @@ MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 CHUNK_SIZE = 1024 * 1024  # 1MB chunk size for streaming
 
 # AI Configuration
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 PORT = int(os.getenv("PORT", 8000))

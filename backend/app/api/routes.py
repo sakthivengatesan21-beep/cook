@@ -188,7 +188,7 @@ async def run_video_pipeline(video_id: str, user_id: str = ""):
         supabase_service.update_video_status(
             video_id,
             status=VideoStatus.TRANSCRIBING.value,
-            message="Transcribing timestamped speech with faster-whisper...",
+            message="Transcribing timestamped speech with Groq Whisper...",
             progress=25,
             stage="TRANSCRIBING",
             user_id=uid
@@ -196,7 +196,7 @@ async def run_video_pipeline(video_id: str, user_id: str = ""):
         storage.update_video_status(
             video_id,
             status=VideoStatus.TRANSCRIBING.value,
-            message="Transcribing timestamped speech with faster-whisper...",
+            message="Transcribing timestamped speech with Groq Whisper...",
             progress=25,
             stage="TRANSCRIBING"
         )
@@ -206,7 +206,7 @@ async def run_video_pipeline(video_id: str, user_id: str = ""):
         t_transcribe = round(time.time() - t0, 2)
         
         # Validate transcript
-        transcription_service.validate_transcript(raw_transcript_data, min_words=5)
+        transcription_service.validate_transcript(raw_transcript_data, min_words=1)
 
         transcript_text = raw_transcript_data["text"]
         transcript_segments = raw_transcript_data["segments"]

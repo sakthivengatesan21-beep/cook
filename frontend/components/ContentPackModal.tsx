@@ -150,12 +150,37 @@ export default function ContentPackModal({
 
   const handleSelectHook = async (hookText: string) => {
     if (!localClip) return;
+    // 1. Immediate optimistic UI update so button state flips to "ACTIVE" instantaneously
+    const optimisticUpdated: Clip = {
+      ...localClip,
+      selected_hook: hookText,
+      hook: hookText,
+      metadata: {
+        ...(localClip.metadata || ({} as any)),
+        selected_hook: hookText,
+      },
+    };
+    setLocalClip(optimisticUpdated);
+    if (onClipUpdated) onClipUpdated(optimisticUpdated);
+
+    // 2. Persist update to backend
     try {
       const updated = await updateClip(localClip.id, { selected_hook: hookText });
-      setLocalClip(updated);
-      if (onClipUpdated) onClipUpdated(updated);
+      if (updated) {
+        const merged: Clip = {
+          ...updated,
+          selected_hook: hookText,
+          hook: hookText,
+          metadata: {
+            ...(updated.metadata || ({} as any)),
+            selected_hook: hookText,
+          },
+        };
+        setLocalClip(merged);
+        if (onClipUpdated) onClipUpdated(merged);
+      }
     } catch (e) {
-      console.error("Failed to select hook", e);
+      console.error("Failed to persist selected hook to backend:", e);
     }
   };
 
@@ -436,7 +461,8 @@ export default function ContentPackModal({
 
                 <div className="space-y-2.5">
                   {hooksList.map((hook, idx) => {
-                    const isSelected = (localClip.selected_hook || localClip.hook) === hook.text;
+                    const currentActive = localClip.selected_hook || localClip.metadata?.selected_hook || localClip.hook;
+                    const isSelected = currentActive === hook.text;
                     return (
                       <div
                         key={idx}

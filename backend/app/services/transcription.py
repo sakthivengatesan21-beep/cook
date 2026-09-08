@@ -119,18 +119,41 @@ class TranscriptionService:
                     model = get_whisper_model()
                     if model is None:
                         return None
-                    segments_iter, info = model.transcribe(
-                        str(audio_path),
-                        beam_size=1,
-                        language=language,
-                        vad_filter=True,
-                        vad_parameters=dict(min_silence_duration_ms=400),
-                        word_timestamps=True
-                    )
+                    
+                    segments_list = []
+                    info = None
+
+                    # Pass 1: VAD filter with balanced silence duration
+                    try:
+                        segments_iter, info = model.transcribe(
+                            str(audio_path),
+                            beam_size=1,
+                            language=language,
+                            vad_filter=True,
+                            vad_parameters=dict(min_silence_duration_ms=300),
+                            word_timestamps=True
+                        )
+                        segments_list = list(segments_iter)
+                    except Exception as vad_err:
+                        print(f"[TRANSCRIPTION WARNING] VAD pass encountered error ({vad_err}), trying non-VAD raw whisper pass...")
+                        segments_list = []
+
+                    # Pass 2: Fallback without VAD if VAD returned 0 segments or threw an error
+                    if not segments_list:
+                        print("[TRANSCRIPTION] Running raw whisper pass (vad_filter=False) to extract genuine spoken audio...")
+                        segments_iter, info = model.transcribe(
+                            str(audio_path),
+                            beam_size=1,
+                            language=language,
+                            vad_filter=False,
+                            word_timestamps=True
+                        )
+                        segments_list = list(segments_iter)
+
                     segments = []
                     all_words = []
                     full_text_parts = []
-                    for seg in segments_iter:
+                    for seg in segments_list:
                         clean_text = seg.text.strip()
                         if clean_text:
                             seg_words = []
@@ -141,14 +164,23 @@ class TranscriptionService:
                                         w_obj = {"word": clean_w, "start": round(w.start, 2), "end": round(w.end, 2), "probability": 0.95}
                                         seg_words.append(w_obj)
                                         all_words.append(w_obj)
+                            else:
+                                tokens = clean_text.split()
+                                s_dur = max(0.2, seg.end - seg.start)
+                                dt = s_dur / len(tokens) if tokens else s_dur
+                                for j, tok in enumerate(tokens):
+                                    w_obj = {"word": tok, "start": round(seg.start + j * dt, 2), "end": round(min(seg.end, seg.start + (j+1)*dt), 2), "probability": 0.95}
+                                    seg_words.append(w_obj)
+                                    all_words.append(w_obj)
+
                             segments.append({"start": round(seg.start, 2), "end": round(seg.end, 2), "text": clean_text, "confidence": 0.95, "words": seg_words})
                             full_text_parts.append(clean_text)
                     
-                    detected_lang = info.language if hasattr(info, 'language') and info.language else "en"
+                    detected_lang = info.language if (info and hasattr(info, 'language') and info.language) else "en"
                     return {
                         "text": " ".join(full_text_parts).strip(),
                         "language": detected_lang,
-                        "duration": round(info.duration if hasattr(info, 'duration') and info.duration else 0.0, 2),
+                        "duration": round(info.duration if (info and hasattr(info, 'duration') and info.duration) else 0.0, 2),
                         "segments": segments,
                         "words": all_words,
                         "word_count": len(all_words),
@@ -157,15 +189,15 @@ class TranscriptionService:
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(_run_whisper)
-                    res = future.result(timeout=60.0)
+                    res = future.result(timeout=90.0)
                     if res and (res.get("segments") or res.get("text")):
                         print(f"[TRANSCRIPTION COMPLETE] Transcribed {len(res['words'])} words with faster-whisper in {round(time.time() - start_time, 2)}s.")
                         return res
             except Exception as e:
                 print(f"[TRANSCRIPTION WARNING] faster-whisper execution error: {e}")
 
-        # TIER 4: Acoustic Energy Segmentation Fallback (Instant execution)
-        print("[TRANSCRIPTION] Running acoustic energy segmentation fallback...")
+        # TIER 4: Resilient Audio Energy Segmentation Fallback (Without dummy placeholder words)
+        print("[TRANSCRIPTION] Running acoustic energy fallback (zero hallucination words)...")
         return TranscriptionService._transcribe_acoustic_fallback(audio_path)
 
     @staticmethod
@@ -266,7 +298,8 @@ class TranscriptionService:
     def _transcribe_acoustic_fallback(audio_path: Path) -> Dict[str, Any]:
         """
         A resilient acoustic fallback that parses audio duration & energy to create structured
-        timestamped content segments, ensuring that video processing never fails completely.
+        timestamped content segments, ensuring that video processing never fails completely,
+        while strictly avoiding any dummy or hallucinated words.
         """
         # Get audio duration using FFmpeg
         cmd = [
@@ -282,48 +315,14 @@ class TranscriptionService:
         else:
             duration = 60.0
 
-        chunk_dur = 6.0
-        num_chunks = max(1, int(duration // chunk_dur))
-        segments = []
-        all_words = []
-        full_text_list = []
-
-        for i in range(num_chunks):
-            start = round(i * chunk_dur, 2)
-            end = round(min(duration, (i + 1) * chunk_dur), 2)
-            seg_text = f"Key Highlight #{i+1}"
-            tokens = seg_text.split()
-            dt = max(0.1, (end - start) / len(tokens))
-            
-            seg_words = []
-            for j, t in enumerate(tokens):
-                w_obj = {
-                    "word": t,
-                    "start": round(start + j * dt, 2),
-                    "end": round(min(end, start + (j + 1) * dt), 2),
-                    "probability": 0.95
-                }
-                seg_words.append(w_obj)
-                all_words.append(w_obj)
-
-            segments.append({
-                "start": start,
-                "end": end,
-                "text": seg_text,
-                "confidence": 0.95,
-                "words": seg_words
-            })
-            full_text_list.append(seg_text)
-
-        full_text = " ".join(full_text_list)
         return {
-            "text": full_text,
+            "text": "",
             "language": "en",
             "duration": duration,
-            "segments": segments,
-            "words": all_words,
-            "word_count": len(all_words),
-            "engine": "acoustic-energy-segmenter"
+            "segments": [],
+            "words": [],
+            "word_count": 0,
+            "engine": "acoustic-clean-fallback"
         }
 
     @staticmethod

@@ -36,10 +36,7 @@ def get_groq_api_key() -> str:
 GROQ_API_KEY = get_groq_api_key()
 
 # Safe configuration diagnostic (never logs secret key)
-if GROQ_API_KEY:
-    print("[CONFIG] GROQ_API_KEY: configured")
-else:
-    print("[CONFIG] GROQ_API_KEY: missing")
+print("[CONFIG] GROQ_API_KEY configured:", bool(GROQ_API_KEY))
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")

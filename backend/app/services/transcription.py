@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import httpx
 
-from app.config import GROQ_API_KEY
+from app.config import GROQ_API_KEY, get_groq_api_key
 
 class TranscriptionService:
     @staticmethod
@@ -16,7 +16,8 @@ class TranscriptionService:
         If GROQ_API_KEY is not configured or transcription fails, fails immediately
         and loudly without silent fallbacks or fake captions.
         """
-        if not GROQ_API_KEY:
+        groq_key = get_groq_api_key() or os.getenv("GROQ_API_KEY", "").strip() or GROQ_API_KEY
+        if not groq_key:
             raise RuntimeError("GROQ_API_KEY is not configured.")
 
         if not audio_path.exists() or os.path.getsize(audio_path) == 0:
@@ -27,7 +28,7 @@ class TranscriptionService:
 
         start_time = time.time()
         url = "https://api.groq.com/openai/v1/audio/transcriptions"
-        headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+        headers = {"Authorization": f"Bearer {groq_key}"}
 
         with open(audio_path, "rb") as f:
             files = {"file": (audio_path.name, f, "audio/wav")}

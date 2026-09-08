@@ -22,7 +22,25 @@ MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 CHUNK_SIZE = 1024 * 1024  # 1MB chunk size for streaming
 
 # AI Configuration
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+def get_groq_api_key() -> str:
+    key = os.getenv("GROQ_API_KEY", "").strip()
+    if not key:
+        for env_path in [BASE_DIR / ".env", BASE_DIR.parent / ".env", BASE_DIR.parent / "frontend" / ".env.local"]:
+            if env_path.exists():
+                load_dotenv(env_path, override=False)
+                key = os.getenv("GROQ_API_KEY", "").strip()
+                if key:
+                    break
+    return key
+
+GROQ_API_KEY = get_groq_api_key()
+
+# Safe configuration diagnostic (never logs secret key)
+if GROQ_API_KEY:
+    print("[CONFIG] GROQ_API_KEY: configured")
+else:
+    print("[CONFIG] GROQ_API_KEY: missing")
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 PORT = int(os.getenv("PORT", 8000))
